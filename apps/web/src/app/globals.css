@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --color-bg: #0b0b0d;
+  --color-panel: #121215;
+  --color-panel-2: #17171b;
+  --color-line: #232329;
+  --color-fg: #ededf0;
+  --color-muted: #8b8b96;
+  --color-accent: #7c9cff;
+  --color-up: #3ecf8e;
+  --color-down: #f2555a;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-feature-settings: "tnum" 1, "cv11" 1;
+}
+
+* {
+  border-color: var(--color-line);
+}
+
+.recharts-surface:focus,
+.recharts-wrapper:focus,
+.recharts-sector:focus {
+  outline: none;
+}

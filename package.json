@@ -1,0 +1,17 @@
+{
+  "name": "invtracker",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.7",
+  "scripts": {
+    "dev": "pnpm db:migrate && pnpm --filter @inv/web dev",
+    "build": "pnpm --filter @inv/web build",
+    "start": "pnpm --filter @inv/web start",
+    "db:generate": "pnpm --filter @inv/db generate",
+    "db:migrate": "pnpm --filter @inv/db migrate",
+    "prices:update": "pnpm --filter @inv/core prices:update",
+    "prices:schedule": "pnpm --filter @inv/core prices:schedule",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  }
+}
