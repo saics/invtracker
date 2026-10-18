@@ -8,7 +8,7 @@ import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { api, useAction, useStatus } from "@/lib/api";
-import { PROVIDER_LABELS } from "@/lib/format";
+import { fmtAgo, fmtTime, PROVIDER_LABELS } from "@/lib/format";
 import { usePrefs } from "./providers";
 import { Button, cn, Select } from "./ui";
 
@@ -75,11 +75,17 @@ export function Header() {
             <Download size={14} className={cn(sync.isPending && "animate-pulse")} />
             Sync
           </Button>
+          {status.data && !job?.running && (
+            <span className="text-xs text-muted" title={status.data.nextPriceAt ? "Cijene se osvježavaju automatski" : "Automatsko osvježavanje je isključeno"}>
+              cijene {fmtAgo(status.data.lastPriceAt)}
+              {status.data.nextPriceAt && ` · sljedeće ${fmtTime(status.data.nextPriceAt)}`}
+            </span>
+          )}
           <Button
             variant="primary"
             onClick={() => refresh.mutate(undefined, { onSuccess: () => status.refetch() })}
             disabled={refresh.isPending || job?.running}
-            title="Osvježi cijene svih itema"
+            title={job?.running && job.current ? job.current : "Osvježi cijene svih itema sada"}
           >
             <RefreshCw size={14} className={cn(job?.running && "animate-spin")} />
             {job?.running ? `${job.done}/${job.total}` : "Cijene"}

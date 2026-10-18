@@ -89,12 +89,36 @@ export type PortfolioSummary = {
   unrealized: number;
   realized: number;
   untrackedCostCount: number;
-  history: { date: string; value: number; invested: number }[];
+  /** Daily totals; `pnl` = value of items with a known cost minus that cost. */
+  history: { date: string; value: number; invested: number; pnl: number }[];
   movers: { id: number; name: string; iconUrl: string | null; change7dPct: number }[];
 };
 
-export async function getPortfolio(db: DB, provider: PriceProvider, days = 90): Promise<PortfolioSummary> {
-  const rows = await getInventoryView(db, provider);
+/**
+ * When each item was owned, for back-dating the value history. Items already there at the
+ * first inventory sync are assumed owned since before tracking started unless a buy says otherwise.
+ */
+export function ownershipWindow(
+  r: Pick<InventoryRow, "status" | "firstSeenAt" | "lastSeenAt" | "buy" | "sell">,
+  firstSyncAt: number,
+): { from: number; to: number } {
+  const seen = r.firstSeenAt.getTime();
+  const from = r.buy ? r.buy.date.getTime() : seen - firstSyncAt < DAY ? -Infinity : seen;
+  const to = r.status === "held" ? Infinity : (r.sell?.date.getTime() ?? r.lastSeenAt.getTime());
+  return { from, to };
+}
+
+export async function getPortfolio(
+  db: DB,
+  provider: PriceProvider,
+  days = 90,
+  itemIds?: number[],
+): Promise<PortfolioSummary> {
+  const all = await getInventoryView(db, provider);
+  // Placeholder items (no asset id) are back-dated to their transaction, so only synced items count here.
+  const firstSyncAt = Math.min(...all.filter((r) => r.assetId).map((r) => r.firstSeenAt.getTime()));
+  const ids = itemIds && new Set(itemIds);
+  const rows = ids ? all.filter((r) => ids.has(r.id)) : all;
   const held = rows.filter((r) => r.status === "held");
   const sold = rows.filter((r) => r.status === "sold");
 
@@ -115,6 +139,8 @@ export async function getPortfolio(db: DB, provider: PriceProvider, days = 90): 
     for (const p of pts) m.set(Math.floor(p.ts.getTime() / DAY), p.price);
     daily.set(name, m);
   }
+  // Sold/gone items count too while they were owned, so past days are not understated.
+  const owned = rows.map((r) => ({ r, ...ownershipWindow(r, firstSyncAt) }));
   const history: PortfolioSummary["history"] = [];
   const last = new Map<string, number>();
   for (let d = startDay; d <= today; d++) {
@@ -122,16 +148,20 @@ export async function getPortfolio(db: DB, provider: PriceProvider, days = 90): 
     const dayEnd = (d + 1) * DAY;
     let v = 0;
     let inv = 0;
+    let pnl = 0;
     let any = false;
-    for (const r of held) {
-      if (r.firstSeenAt.getTime() >= dayEnd) continue;
+    for (const { r, from, to } of owned) {
+      if (from >= dayEnd || to < dayEnd) continue;
       const p = last.get(r.marketHashName);
       if (p == null) continue;
       any = true;
       v += p;
-      if (r.cost != null) inv += r.cost;
+      if (r.cost != null) {
+        inv += r.cost;
+        pnl += p - r.cost;
+      }
     }
-    if (any) history.push({ date: new Date(d * DAY).toISOString().slice(0, 10), value: v, invested: inv });
+    if (any) history.push({ date: new Date(d * DAY).toISOString().slice(0, 10), value: v, invested: inv, pnl });
   }
 
   const movers = held

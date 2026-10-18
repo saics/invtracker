@@ -34,10 +34,12 @@ export function useMoney() {
       const v = convert(cents);
       return v == null ? "—" : (v > 0 ? "+" : "") + nf.format(v);
     };
-    /** Short axis labels: €950, €1.2k */
+    /** Short axis labels: €0.45, €950, €1.2k, -€30 */
     const compact = (cents: number) => {
       const v = convert(cents) ?? 0;
-      return v >= 1000 ? `${symbol}${(v / 1000).toFixed(1)}k` : `${symbol}${Math.round(v)}`;
+      const a = Math.abs(v);
+      const s = a >= 1000 ? `${(a / 1000).toFixed(1)}k` : a < 10 && a > 0 ? a.toFixed(2) : `${Math.round(a)}`;
+      return `${v < 0 ? "-" : ""}${symbol}${s}`;
     };
     /** Amount typed in display currency → USD dollars for the API. */
     const toUsd = (amount: number) => (rate ? amount / rate : amount);

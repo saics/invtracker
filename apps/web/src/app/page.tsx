@@ -1,18 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { PortfolioChart } from "@/components/charts";
+import { useState } from "react";
+import { CHART_RANGES, PortfolioChart, type ChartMode } from "@/components/charts";
 import { usePriceProvider } from "@/components/providers";
-import { Card, CardHeader, Empty, ErrorText, Stat } from "@/components/ui";
+import { Card, CardHeader, Empty, ErrorText, Segmented, Stat } from "@/components/ui";
 import { usePortfolio, useStatus } from "@/lib/api";
 import { fmtPct, PROVIDER_LABELS, toneOf } from "@/lib/format";
 import { useMoney } from "@/lib/money";
 
 export default function Dashboard() {
   const { provider } = usePriceProvider();
-  const { data: p, error, isLoading } = usePortfolio(provider);
+  const [days, setDays] = useState(90);
+  const { data: p, error, isLoading } = usePortfolio(provider, { days });
   const status = useStatus().data;
   const money = useMoney();
+  const [mode, setMode] = useState<ChartMode>("value");
 
   if (status && status.itemCount === 0) {
     return (
@@ -49,12 +52,27 @@ export default function Dashboard() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader title="Vrijednost kroz vrijeme (90 dana)" />
+          <CardHeader
+            title={mode === "pnl" ? "P&L kroz vrijeme" : "Vrijednost kroz vrijeme"}
+            right={
+              <div className="flex flex-wrap items-center gap-2">
+                <Segmented
+                  options={[
+                    { value: "value", label: "Vrijednost" },
+                    { value: "pnl", label: "P&L" },
+                  ]}
+                  value={mode}
+                  onChange={setMode}
+                />
+                <Segmented options={CHART_RANGES} value={days} onChange={setDays} />
+              </div>
+            }
+          />
           <div className="px-2 pb-3">
             {p?.history.length ? (
-              <PortfolioChart data={p.history} />
+              <PortfolioChart data={p.history} mode={mode} />
             ) : (
-              <Empty>Nema povijesti cijena. Osvježi cijene nekoliko puta (ili pokreni scheduler) da se graf popuni.</Empty>
+              <Empty>Nema povijesti cijena za ovaj izvor. Pričekaj prvo automatsko osvježavanje ili odaberi „CSFloat · prodaje“ za povijest unazad.</Empty>
             )}
           </div>
         </Card>

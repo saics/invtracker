@@ -6,12 +6,27 @@ import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core
 export const ITEM_STATUSES = ["held", "gone", "sold"] as const;
 export const TX_TYPES = ["buy", "sell"] as const;
 export const PLATFORMS = ["csfloat", "skinswap", "csmoney", "dmarket", "steam", "other"] as const;
-export const PRICE_PROVIDERS = ["csfloat_listing", "csfloat_buyorder", "steam"] as const;
+/** `csfloat_sales` is the daily average sale price from CSFloat's history graph (one row per day, backfilled). */
+export const PRICE_PROVIDERS = ["csfloat_listing", "csfloat_buyorder", "csfloat_sales", "steam"] as const;
 
 export type ItemStatus = (typeof ITEM_STATUSES)[number];
 export type TxType = (typeof TX_TYPES)[number];
 export type Platform = (typeof PLATFORMS)[number];
 export type PriceProvider = (typeof PRICE_PROVIDERS)[number];
+
+/**
+ * A sticker, patch or charm applied to an item. `wear` is the sticker scrape (0 = pristine,
+ * 1 = fully scraped); charms have a `pattern` instead. Rows synced before this existed hold
+ * plain name strings.
+ */
+export type ItemSticker = {
+  kind: "sticker" | "patch" | "charm";
+  name: string;
+  image?: string | null;
+  slot?: number | null;
+  wear?: number | null;
+  pattern?: number | null;
+};
 
 const now = sql`(unixepoch() * 1000)`;
 
@@ -29,7 +44,7 @@ export const items = sqliteTable(
     type: text("type"),
     floatValue: real("float_value"),
     paintSeed: integer("paint_seed"),
-    stickers: text("stickers", { mode: "json" }).$type<string[]>(),
+    stickers: text("stickers", { mode: "json" }).$type<(ItemSticker | string)[]>(),
     inspectLink: text("inspect_link"),
     tradable: integer("tradable", { mode: "boolean" }),
     marketable: integer("marketable", { mode: "boolean" }),

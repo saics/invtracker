@@ -1,21 +1,7 @@
 import { getDb } from "@inv/db";
-import cron from "node-cron";
-import { syncInventory, updatePrices } from "../src";
+import { DEFAULT_PRICE_CRON, startAutoRefresh } from "../src";
 
-const db = getDb();
-const expr = process.env.PRICE_CRON || "0 */6 * * *";
-
-async function run() {
-  const started = new Date().toISOString();
-  try {
-    if (process.env.STEAM_ID) console.log(started, "inventory:", await syncInventory(db));
-    const res = await updatePrices(db);
-    console.log(started, `prices: ${res.done}/${res.total}, ${res.errors.length} errors`);
-  } catch (e) {
-    console.error(started, e);
-  }
-}
-
-console.log(`Scheduler running (${expr}). Ctrl+C to stop.`);
-cron.schedule(expr, run);
-await run();
+// The web dev server already does this (see apps/web/src/instrumentation.ts); this script is
+// for running the refresher on its own, e.g. next to `pnpm start` with AUTO_REFRESH=0.
+await startAutoRefresh(getDb(), { staleAfterMs: 0 });
+console.log(`Scheduler running (${process.env.PRICE_CRON || DEFAULT_PRICE_CRON}). Ctrl+C to stop.`);

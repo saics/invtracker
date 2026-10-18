@@ -14,6 +14,8 @@ export type CsfloatItem = {
 export type CsfloatListing = { id: string; price: number; item: CsfloatItem };
 export type CsfloatBuyOrder = { id: string; price: number; qty?: number; market_hash_name?: string };
 
+export type CsfloatSalesDay = { day: string; avg_price: number; count: number };
+
 export type CsfloatTrade = {
   id: string;
   state: string;
@@ -64,6 +66,15 @@ export class CsfloatClient {
     const orders = unwrapList<CsfloatBuyOrder>(await this.get(`/listings/${id}/buy-orders?limit=10`));
     const prices = orders.map((o) => o.price).filter((p) => Number.isFinite(p));
     return prices.length ? Math.max(...prices) : null;
+  }
+
+  /** Daily average sale prices (all floats/patterns of the name), oldest first. Goes back years. */
+  async salesHistory(marketHashName: string): Promise<{ day: Date; price: number; count: number }[]> {
+    const res = await this.get<CsfloatSalesDay[]>(`/history/${encodeURIComponent(marketHashName)}/graph`);
+    return unwrapList<CsfloatSalesDay>(res)
+      .filter((d) => Number.isFinite(d.avg_price) && d.avg_price > 0)
+      .map((d) => ({ day: new Date(d.day), price: Math.round(d.avg_price), count: d.count }))
+      .sort((a, b) => a.day.getTime() - b.day.getTime());
   }
 
   async me(): Promise<{ steam_id: string; username?: string }> {

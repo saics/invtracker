@@ -30,6 +30,10 @@ function TransactionsInner() {
   const importCsv = useAction((text: string) =>
     api<ImportResult>("/transactions/import/csv", { method: "POST", body: text, headers: { "Content-Type": "text/csv" } }),
   );
+  const importSkinswap = useAction((text: string) =>
+    api<ImportResult>("/transactions/import/skinswap", { method: "POST", body: text, headers: { "Content-Type": "application/json" } }),
+  );
+  const skinswapRef = useRef<HTMLInputElement>(null);
   const remove = useAction((id: number) => api(`/transactions/${id}`, { method: "DELETE" }));
 
   const rows = useMemo(() => (data ?? []).filter((t) => !platform || t.platform === platform), [data, platform]);
@@ -68,12 +72,30 @@ function TransactionsInner() {
                   if (file) importCsv.mutate(await file.text(), { onSuccess: setResult });
                 }}
               />
+              <Button
+                onClick={() => skinswapRef.current?.click()}
+                disabled={importSkinswap.isPending}
+                title="JSON s api.skinswap.com/api/user/transactions"
+              >
+                <Upload size={14} /> Skinswap JSON
+              </Button>
+              <input
+                ref={skinswapRef}
+                type="file"
+                accept=".json,application/json"
+                hidden
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) importSkinswap.mutate(await file.text(), { onSuccess: setResult });
+                }}
+              />
             </div>
           }
         />
         <div className="px-5 pb-5">
           <TxForm key={prefillName ?? "new"} initial={{ marketHashName: prefillName, itemId: prefillItem }} />
-          <ErrorText error={importCsfloat.error ?? importCsv.error} />
+          <ErrorText error={importCsfloat.error ?? importCsv.error ?? importSkinswap.error} />
           {result && (
             <div className="mt-3 rounded-lg bg-panel-2 px-3 py-2 text-xs text-muted">
               Uvoz:{" "}

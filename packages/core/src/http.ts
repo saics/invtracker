@@ -23,19 +23,26 @@ async function throttle(host: string, minGapMs: number) {
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function fetchJson<T = unknown>(
-  url: string,
-  opts: { headers?: Record<string, string>; minGapMs?: number; retries?: number } = {},
-): Promise<T> {
+type FetchOpts = { headers?: Record<string, string>; minGapMs?: number; retries?: number };
+
+async function request(url: string, opts: FetchOpts, accept: string): Promise<Response> {
   const { headers, minGapMs = 0, retries = 2 } = opts;
   const host = new URL(url).host;
   for (let attempt = 0; ; attempt++) {
     await throttle(host, minGapMs);
-    const res = await fetch(url, { headers: { Accept: "application/json", ...headers } });
-    if (res.ok) return (await res.json()) as T;
+    const res = await fetch(url, { headers: { Accept: accept, ...headers } });
+    if (res.ok) return res;
     const body = await res.text().catch(() => "");
     const retryable = res.status === 429 || res.status >= 500;
     if (!retryable || attempt >= retries) throw new HttpError(res.status, url, body);
     await sleep(res.status === 429 ? 30_000 * (attempt + 1) : 2_000 * (attempt + 1));
   }
+}
+
+export async function fetchJson<T = unknown>(url: string, opts: FetchOpts = {}): Promise<T> {
+  return (await (await request(url, opts, "application/json")).json()) as T;
+}
+
+export async function fetchText(url: string, opts: FetchOpts = {}): Promise<string> {
+  return (await request(url, opts, "text/html,*/*")).text();
 }

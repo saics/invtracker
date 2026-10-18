@@ -10,6 +10,7 @@
   "scripts": {
     "prices:update": "tsx scripts/update-prices.ts",
     "prices:schedule": "tsx scripts/schedule.ts",
+    "skinswap:import": "tsx scripts/import-skinswap.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
   },

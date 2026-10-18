@@ -64,6 +64,30 @@ export function Badge({ children, className }: { children: ReactNode; className?
   );
 }
 
+export function Segmented<T extends string | number>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex gap-0.5 rounded-lg border border-line bg-panel p-0.5 text-xs">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          className={cn("rounded-md px-2 py-0.5", value === o.value ? "bg-panel-2 text-fg" : "text-muted hover:text-fg")}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function Stat({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: string }) {
   return (
     <Card className="px-5 py-4">

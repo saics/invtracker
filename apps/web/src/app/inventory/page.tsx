@@ -2,11 +2,11 @@
 
 import { ArrowDownUp } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { Sparkline } from "@/components/charts";
+import { useDeferredValue, useMemo, useState } from "react";
+import { CHART_RANGES, PortfolioChart, Sparkline, type ChartMode } from "@/components/charts";
 import { usePriceProvider } from "@/components/providers";
-import { Badge, Card, cn, Empty, ErrorText, Input } from "@/components/ui";
-import { useInventory, type InventoryRowJ } from "@/lib/api";
+import { Badge, Card, CardHeader, cn, Empty, ErrorText, Input, Segmented } from "@/components/ui";
+import { useInventory, usePortfolio, type InventoryRowJ } from "@/lib/api";
 import { fmtDate, fmtPct, PLATFORM_LABELS, toneOf } from "@/lib/format";
 import { useMoney } from "@/lib/money";
 
@@ -57,6 +57,13 @@ export default function InventoryPage() {
     return c;
   }, [data]);
 
+  // The chart follows the table: current tab + search.
+  const chartIds = useDeferredValue(useMemo(() => rows.map((r) => r.id).sort((a, b) => a - b), [rows]));
+  const [chartMode, setChartMode] = useState<ChartMode>("value");
+  const [chartDays, setChartDays] = useState(90);
+  const chart = usePortfolio(provider, { days: chartDays, ids: chartIds });
+  const last = chart.data?.history.at(-1);
+
   const th = (key: SortKey, label: string, className?: string) => (
     <th className={cn("px-3 py-2 font-normal", className)}>
       <button
@@ -86,6 +93,41 @@ export default function InventoryPage() {
         <Input placeholder="Traži…" value={q} onChange={(e) => setQ(e.target.value)} className="ml-auto w-64" />
       </div>
       <ErrorText error={error} />
+
+      <Card>
+        <CardHeader
+          title={
+            <>
+              {chartMode === "pnl" ? "P&L kroz vrijeme" : "Vrijednost kroz vrijeme"} · {rows.length} itema
+              {last && (
+                <span className={cn("ml-2 tabular-nums", chartMode === "pnl" ? toneOf(last.pnl) : "text-fg")}>
+                  {chartMode === "pnl" ? money.fmtSigned(last.pnl) : money.fmt(last.value)}
+                </span>
+              )}
+            </>
+          }
+          right={
+            <div className="flex flex-wrap items-center gap-2">
+              <Segmented
+                options={[
+                  { value: "value", label: "Vrijednost" },
+                  { value: "pnl", label: "P&L" },
+                ]}
+                value={chartMode}
+                onChange={setChartMode}
+              />
+              <Segmented options={CHART_RANGES} value={chartDays} onChange={setChartDays} />
+            </div>
+          }
+        />
+        <div className="px-2 pb-3">
+          {chart.data?.history.length ? (
+            <PortfolioChart data={chart.data.history} mode={chartMode} />
+          ) : (
+            <Empty>{chart.isLoading ? "Učitavam…" : "Nema povijesti cijena za ove iteme."}</Empty>
+          )}
+        </div>
+      </Card>
 
       <Card className="overflow-x-auto">
         {isLoading ? (

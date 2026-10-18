@@ -3,7 +3,10 @@ import { db, handler, parseProvider } from "@/lib/server";
 
 export const dynamic = "force-dynamic";
 
+/** `?days=90` history length; `?ids=1,2,3` limits everything to those items (inventory filters). */
 export const GET = handler(async (req: Request) => {
-  const days = Number(new URL(req.url).searchParams.get("days") ?? 90);
-  return getPortfolio(db(), parseProvider(req), Number.isFinite(days) ? Math.min(days, 3650) : 90);
+  const params = new URL(req.url).searchParams;
+  const days = Number(params.get("days") ?? 90);
+  const ids = params.get("ids")?.split(",").map(Number).filter(Number.isInteger);
+  return getPortfolio(db(), parseProvider(req), Number.isFinite(days) ? Math.min(days, 3650) : 90, ids);
 });

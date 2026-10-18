@@ -24,6 +24,9 @@ export type Status = {
   itemCount: number;
   transactionCount: number;
   priceJob: PriceJob;
+  lastPriceAt: string | null;
+  /** Next automatic refresh; null when auto-refresh is off. */
+  nextPriceAt: string | null;
 };
 export type ItemDetail = {
   item: ItemJ;
@@ -45,11 +48,20 @@ export const useStatus = () =>
   useQuery({
     queryKey: ["status"],
     queryFn: () => api<Status>("/status"),
-    refetchInterval: (q) => (q.state.data?.priceJob.running ? 1500 : false),
+    // Slow poll while idle so background (scheduled) refreshes show up without a reload.
+    refetchInterval: (q) => (q.state.data?.priceJob.running ? 1500 : 30_000),
   });
 
-export const usePortfolio = (provider: PriceProvider) =>
-  useQuery({ queryKey: ["portfolio", provider], queryFn: () => api<Portfolio>(`/portfolio?provider=${provider}`) });
+export const usePortfolio = (provider: PriceProvider, opts: { days?: number; ids?: number[] } = {}) => {
+  const q = new URLSearchParams({ provider, days: String(opts.days ?? 90) });
+  if (opts.ids) q.set("ids", opts.ids.join(","));
+  return useQuery({
+    queryKey: ["portfolio", provider, opts.days ?? 90, opts.ids?.join(",") ?? null],
+    queryFn: () => api<Portfolio>(`/portfolio?${q}`),
+    enabled: !opts.ids || opts.ids.length > 0,
+    placeholderData: (prev) => prev,
+  });
+};
 
 export const useInventory = (provider: PriceProvider) =>
   useQuery({ queryKey: ["inventory", provider], queryFn: () => api<InventoryRowJ[]>(`/inventory?provider=${provider}`) });

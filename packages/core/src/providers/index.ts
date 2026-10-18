@@ -5,11 +5,13 @@ import { steamPrice } from "./steam";
 export const PROVIDER_LABELS: Record<PriceProvider, string> = {
   csfloat_listing: "CSFloat (lowest listing)",
   csfloat_buyorder: "CSFloat (buy order)",
+  csfloat_sales: "CSFloat (sales, daily average)",
   steam: "Steam Market",
 };
 
 /**
- * Fetches prices for one item from the requested providers. The CSFloat listing
+ * Fetches current prices for one item from the requested providers (`csfloat_sales` is a
+ * daily series and is handled by `updatePrices` instead). The CSFloat listing
  * lookup is shared with the buy-order lookup to save a request.
  */
 export async function fetchPrices(
@@ -32,4 +34,4 @@ export async function fetchPrices(
 }
 
 export { CsfloatClient, getCsfloat } from "./csfloat";
-export { parseSteamPrice, steamPrice } from "./steam";
+export { parseSteamHistoryPage, parseSteamPrice, steamPrice, steamPriceHistory } from "./steam";

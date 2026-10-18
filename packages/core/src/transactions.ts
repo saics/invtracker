@@ -127,6 +127,65 @@ export async function importCsfloatTrades(db: DB) {
   return { fetched: trades.length, completed: rows.length, inserted, ...linked };
 }
 
+// ---------- Skinswap import ----------
+
+/**
+ * Subset of a transaction from Skinswap's `GET api.skinswap.com/api/user/transactions`
+ * (no official export; the JSON is pulled from the logged-in site). Money is USD cents.
+ */
+export type SkinswapTransaction = {
+  id: string;
+  type: string; // "china" (market buy), "trade", "deposit", "withdraw", …
+  status: string;
+  value: number | null;
+  /** What actually left the balance. Newer market buys charge ~1.4× the listed price here. */
+  balanceChange?: number;
+  createdAt: string;
+  siteItems: { id: number; market_hash_name: string; price: number; deliveryOutcome?: string }[];
+};
+
+/** Item purchases only: deposits and withdrawals move money/items, not ownership. */
+const SKINSWAP_BUY_TYPES = new Set(["china", "trade"]);
+
+/**
+ * One buy row per received item. The amount paid is split across items by listed price;
+ * `price` is the listed price and anything paid above it goes into `fee`.
+ */
+export function skinswapTxToRows(tx: SkinswapTransaction): NewTransaction[] {
+  if (tx.status !== "completed" || !SKINSWAP_BUY_TYPES.has(tx.type)) return [];
+  const received = tx.siteItems.filter((i) => i.deliveryOutcome !== "refunded");
+  const listed = received.reduce((s, i) => s + i.price, 0);
+  const paid = Math.abs(tx.balanceChange ?? tx.value ?? 0) || listed;
+  if (!listed) return [];
+  return received.map((item) => {
+    const share = Math.round((paid * item.price) / listed);
+    const price = Math.min(item.price, share);
+    return {
+      externalId: `skinswap:${tx.id}:${item.id}`,
+      marketHashName: item.market_hash_name,
+      type: "buy",
+      platform: "skinswap",
+      price,
+      fee: share - price,
+      date: new Date(tx.createdAt),
+    };
+  });
+}
+
+/** Accepts the raw API page (`{ data: [...] }`) or the concatenated array. */
+export async function importSkinswapTransactions(db: DB, payload: unknown) {
+  const list = (Array.isArray(payload) ? payload : (payload as { data?: unknown })?.data) as SkinswapTransaction[];
+  if (!Array.isArray(list)) throw new Error("Expected a Skinswap transactions array");
+  const rows = list.flatMap(skinswapTxToRows);
+  let inserted = 0;
+  for (const row of rows) {
+    const res = await db.insert(transactions).values(row).onConflictDoNothing({ target: transactions.externalId });
+    inserted += res.rowsAffected;
+  }
+  const linked = await linkTransactions(db);
+  return { fetched: list.length, items: rows.length, inserted, ...linked };
+}
+
 // ---------- Linking transactions to items ----------
 
 const FLOAT_EPS = 1e-7;
