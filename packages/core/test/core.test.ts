@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { computeItemPnl } from "../src/portfolio";
 import { parseSteamPrice } from "../src/providers/steam";
-import { csfloatTradeToRow, parseTransactionsCsv } from "../src/transactions";
+import { csfloatTradeToRow, isDmarketCsv, parseDmarketCsv, parseTransactionsCsv } from "../src/transactions";
 import { normalizeInventory, parseStickers } from "../src/inventory";
 
 describe("parseSteamPrice", () => {
@@ -71,6 +71,41 @@ describe("parseTransactionsCsv", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ platform: "skinswap", price: 95.5, floatValue: 0.31, note: "first, cheap" });
     expect(errors[0]?.line).toBe(3);
+  });
+});
+
+describe("parseDmarketCsv", () => {
+  const csv = [
+    "\uFEFFtype;status;title;closed_at_utc;finalization_time_utc;currency;price_api_units;fee_currency;fee_api_units;fee_fraction;offer_id;target_id;asset_id;offer_created_at_utc;amount_raw",
+    ";;;;;;;;;;;;;;",
+    "buy;successful;AWP | Printstream (Well-Worn);2026-09-10T12:03:21.000Z;2026-09-16T19:00:00.000Z;USD;38,42;USD;;;o1;t1;a1;;1",
+    "buy;successful;★ Shadow Daggers | Crimson Web (Minimal Wear);2026-09-10T12:03:21.000Z;2026-09-10T12:03:21.000Z;USD;85,14;USD;;;o2;t2;a2;;1",
+    "sell;successful;Foo;2026-09-11T10:00:00.000Z;2026-09-11T10:00:00.000Z;USD;1.234,56;USD;24,69;0,02;o3;t3;a3;;1",
+    "buy;failed;Bar;2026-09-11T10:00:00.000Z;;USD;1,00;USD;;;o4;t4;a4;;1",
+  ].join("\r\n");
+
+  it("detects the format", () => {
+    expect(isDmarketCsv(csv)).toBe(true);
+    expect(isDmarketCsv("date,type,platform,market_hash_name,price,fee,float,note")).toBe(false);
+  });
+
+  it("parses successful trades with decimal commas", () => {
+    const { rows, errors, skipped } = parseDmarketCsv(csv);
+    expect(errors).toEqual([]);
+    expect(skipped).toBe(1);
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toMatchObject({
+      externalId: "dmarket:buy:o1",
+      marketHashName: "AWP | Printstream (Well-Worn)",
+      type: "buy",
+      platform: "dmarket",
+      price: 3842,
+      fee: 0,
+      note: "trade lock do 2026-09-16",
+    });
+    expect(rows[0]!.date.toISOString()).toBe("2026-09-10T12:03:21.000Z");
+    expect(rows[1]).toMatchObject({ marketHashName: "★ Shadow Daggers | Crimson Web (Minimal Wear)", price: 8514, note: null });
+    expect(rows[2]).toMatchObject({ type: "sell", price: 123456, fee: 2469 });
   });
 });
 

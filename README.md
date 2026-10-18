@@ -32,6 +32,8 @@ date,type,platform,market_hash_name,price,fee,float,note
 2026-03-01,buy,skinswap,"AWP | Asiimov (Field-Tested)",95.50,,0.31,
 ```
 
+**DMarket:** export povijesti tradeova (`type;status;title;closed_at_utc;…;price_api_units;…`) možeš izravno uvesti istim CSV gumbom — format se prepoznaje sam, uvoze se samo `successful` kupnje/prodaje, a ponovni uvoz istog exporta ne stvara duplikate.
+
 Cijene su u USD; u bazi se spremaju kao centi.
 
 ### Automatsko praćenje cijena

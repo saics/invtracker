@@ -37,8 +37,8 @@ export function toRow(input: TransactionInput): NewTransaction {
 
 export const CSV_HEADER = "date,type,platform,market_hash_name,price,fee,float,note";
 
-/** RFC4180-ish CSV parser (quoted fields, escaped quotes, CRLF). */
-export function parseCsv(text: string): string[][] {
+/** RFC4180-ish CSV parser (quoted fields, escaped quotes, CRLF, custom delimiter). */
+export function parseCsv(text: string, delimiter = ","): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -50,7 +50,7 @@ export function parseCsv(text: string): string[][] {
       else if (c === '"') quoted = false;
       else field += c;
     } else if (c === '"') quoted = true;
-    else if (c === ",") row.push(field), (field = "");
+    else if (c === delimiter) row.push(field), (field = "");
     else if (c === "\n" || c === "\r") {
       if (c === "\r" && text[i + 1] === "\n") i++;
       row.push(field), rows.push(row), (row = []), (field = "");
@@ -89,6 +89,79 @@ export function parseTransactionsCsv(text: string) {
     else errors.push({ line: i + 2, error: parsed.error.issues.map((x) => `${x.path.join(".")}: ${x.message}`).join("; ") });
   });
   return { rows, errors };
+}
+
+// ---------- DMarket CSV export ----------
+
+/** Header of DMarket's trade history export (semicolon-separated, decimal comma). */
+const DMARKET_COLUMNS = ["type", "status", "title", "closed_at_utc", "price_api_units"];
+
+export function isDmarketCsv(text: string) {
+  const header = text.replace(/^\uFEFF/, "").split(/\r?\n/, 1)[0]!.toLowerCase().split(";");
+  return DMARKET_COLUMNS.every((c) => header.includes(c));
+}
+
+/** "38,42" / "1.234,56" / "38.42" -> cents. */
+const dmarketCents = (raw: string | undefined) => {
+  if (!raw?.trim()) return 0;
+  const s = raw.trim();
+  const normalized = s.includes(",") ? s.replace(/\./g, "").replace(",", ".") : s;
+  const n = Number(normalized);
+  return Number.isFinite(n) ? toCents(n) : NaN;
+};
+
+/** Parses DMarket's trade history export. Only successful buys/sells are kept. */
+export function parseDmarketCsv(text: string) {
+  const [header, ...lines] = parseCsv(text.replace(/^\uFEFF/, ""), ";");
+  const cols = (header ?? []).map((h) => h.trim().toLowerCase());
+  const rows: NewTransaction[] = [];
+  const errors: { line: number; error: string }[] = [];
+  let skipped = 0;
+
+  lines.forEach((cells, i) => {
+    const get = (name: string) => cells[cols.indexOf(name)]?.trim() || undefined;
+    if (!cells.some((c) => c.trim())) return;
+    const type = get("type")?.toLowerCase();
+    if (get("status")?.toLowerCase() !== "successful" || (type !== "buy" && type !== "sell")) return void skipped++;
+
+    const name = get("title");
+    const date = new Date(get("closed_at_utc") ?? "");
+    const price = dmarketCents(get("price_api_units"));
+    const fee = dmarketCents(get("fee_api_units"));
+    if (!name || Number.isNaN(date.getTime()) || Number.isNaN(price) || Number.isNaN(fee)) {
+      errors.push({ line: i + 2, error: "Missing or invalid title, closed_at_utc or price" });
+      return;
+    }
+    const unlock = new Date(get("finalization_time_utc") ?? "");
+    const offerId = get("offer_id");
+    rows.push({
+      externalId: offerId ? `dmarket:${type}:${offerId}` : null,
+      marketHashName: name,
+      type,
+      platform: "dmarket",
+      price,
+      fee,
+      floatValue: null,
+      date,
+      note: unlock.getTime() > date.getTime() ? `trade lock do ${unlock.toISOString().slice(0, 10)}` : null,
+    });
+  });
+  return { rows, errors, skipped };
+}
+
+/** Imports either the generic {@link CSV_HEADER} format or a DMarket export. Re-importing a DMarket export skips duplicates. */
+export async function importTransactionsCsv(db: DB, text: string) {
+  const dmarket = isDmarketCsv(text);
+  const { rows, errors } = dmarket
+    ? parseDmarketCsv(text)
+    : (({ rows, errors }) => ({ rows: rows.map(toRow), errors }))(parseTransactionsCsv(text));
+  let inserted = 0;
+  for (const row of rows) {
+    const res = await db.insert(transactions).values(row).onConflictDoNothing({ target: transactions.externalId });
+    inserted += res.rowsAffected;
+  }
+  const linked = inserted ? await linkTransactions(db) : null;
+  return { format: dmarket ? "dmarket" : "generic", parsed: rows.length, inserted, errors, ...linked };
 }
 
 // ---------- CSFloat import ----------
