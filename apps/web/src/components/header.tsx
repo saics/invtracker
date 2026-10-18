@@ -1,5 +1,6 @@
 "use client";
 
+import { CURRENCIES, type Currency } from "@inv/core/currency";
 import { PRICE_PROVIDERS, type PriceProvider } from "@inv/db/schema";
 import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, Download } from "lucide-react";
@@ -8,7 +9,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { api, useAction, useStatus } from "@/lib/api";
 import { PROVIDER_LABELS } from "@/lib/format";
-import { usePriceProvider } from "./providers";
+import { usePrefs } from "./providers";
 import { Button, cn, Select } from "./ui";
 
 const NAV = [
@@ -20,7 +21,7 @@ const NAV = [
 
 export function Header() {
   const path = usePathname();
-  const { provider, setProvider } = usePriceProvider();
+  const { provider, setProvider, currency, setCurrency } = usePrefs();
   const status = useStatus();
   const job = status.data?.priceJob;
 
@@ -56,6 +57,13 @@ export function Header() {
           })}
         </nav>
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          <Select value={currency} onChange={(e) => setCurrency(e.target.value as Currency)} aria-label="Valuta">
+            {CURRENCIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </Select>
           <Select value={provider} onChange={(e) => setProvider(e.target.value as PriceProvider)} aria-label="Izvor cijena">
             {PRICE_PROVIDERS.map((p) => (
               <option key={p} value={p} disabled={status.data && !status.data.providers.includes(p)}>

@@ -8,7 +8,8 @@ import { Suspense, useMemo, useRef, useState } from "react";
 import { TxForm } from "@/components/tx-form";
 import { Badge, Button, Card, CardHeader, cn, Empty, ErrorText, Select } from "@/components/ui";
 import { api, useAction, useStatus, useTransactions } from "@/lib/api";
-import { fmtDate, fmtUsd, PLATFORM_LABELS } from "@/lib/format";
+import { fmtDate, PLATFORM_LABELS } from "@/lib/format";
+import { useMoney } from "@/lib/money";
 
 type ImportResult = Record<string, unknown> & { errors?: { line: number; error: string }[] };
 
@@ -18,6 +19,7 @@ function TransactionsInner() {
   const prefillItem = params.get("itemId") ? Number(params.get("itemId")) : undefined;
 
   const { data, error, isLoading } = useTransactions();
+  const money = useMoney();
   const status = useStatus().data;
   const [platform, setPlatform] = useState("");
   const [editing, setEditing] = useState<number | null>(null);
@@ -95,7 +97,7 @@ function TransactionsInner() {
 
       <Card className="overflow-x-auto">
         <CardHeader
-          title={`Transakcije · kupljeno ${fmtUsd(totals.bought)} · prodano ${fmtUsd(totals.sold)}`}
+          title={`Transakcije · kupljeno ${money.fmt(totals.bought)} · prodano ${money.fmt(totals.sold)}`}
           right={
             <Select value={platform} onChange={(e) => setPlatform(e.target.value)}>
               <option value="">Sve platforme</option>
@@ -149,8 +151,8 @@ function TransactionsInner() {
                       {t.note && <div className="text-xs text-muted">{t.note}</div>}
                     </td>
                     <td className="px-3 text-muted">{PLATFORM_LABELS[t.platform]}</td>
-                    <td className="px-3 text-right tabular-nums">{fmtUsd(t.price)}</td>
-                    <td className="px-3 text-right text-muted tabular-nums">{t.fee ? fmtUsd(t.fee) : "—"}</td>
+                    <td className="px-3 text-right tabular-nums">{money.fmt(t.price)}</td>
+                    <td className="px-3 text-right text-muted tabular-nums">{t.fee ? money.fmt(t.fee) : "—"}</td>
                     <td className="pr-5 text-right whitespace-nowrap opacity-0 group-hover:opacity-100">
                       <Button variant="ghost" onClick={() => setEditing(t.id)} aria-label="Uredi">
                         <Pencil size={13} />

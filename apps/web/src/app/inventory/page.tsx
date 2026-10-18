@@ -7,7 +7,8 @@ import { Sparkline } from "@/components/charts";
 import { usePriceProvider } from "@/components/providers";
 import { Badge, Card, cn, Empty, ErrorText, Input } from "@/components/ui";
 import { useInventory, type InventoryRowJ } from "@/lib/api";
-import { fmtDate, fmtPct, fmtSignedUsd, fmtUsd, PLATFORM_LABELS, toneOf } from "@/lib/format";
+import { fmtDate, fmtPct, PLATFORM_LABELS, toneOf } from "@/lib/format";
+import { useMoney } from "@/lib/money";
 
 const TABS = [
   { key: "held", label: "U inventoryju" },
@@ -30,6 +31,7 @@ const sorters: Record<SortKey, (r: InventoryRowJ) => number | string | null> = {
 export default function InventoryPage() {
   const { provider } = usePriceProvider();
   const { data, error, isLoading } = useInventory(provider);
+  const money = useMoney();
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("held");
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "price", dir: -1 });
@@ -125,7 +127,7 @@ export default function InventoryPage() {
                   <td className="px-3">
                     {r.buy ? (
                       <div>
-                        <span className="tabular-nums">{fmtUsd(r.cost)}</span>
+                        <span className="tabular-nums">{money.fmt(r.cost)}</span>
                         <div className="text-xs text-muted">
                           {PLATFORM_LABELS[r.buy.platform]} · {fmtDate(r.buy.date)}
                         </div>
@@ -136,9 +138,9 @@ export default function InventoryPage() {
                       </Link>
                     )}
                   </td>
-                  <td className="px-3 text-right tabular-nums">{fmtUsd(r.status === "sold" ? r.proceeds : r.price)}</td>
+                  <td className="px-3 text-right tabular-nums">{money.fmt(r.status === "sold" ? r.proceeds : r.price)}</td>
                   <td className={cn("px-3 text-right tabular-nums", toneOf(r.pnl))}>
-                    {fmtSignedUsd(r.pnl)}
+                    {money.fmtSigned(r.pnl)}
                     <div className="text-xs">{fmtPct(r.pnlPct)}</div>
                   </td>
                   <td className={cn("px-3 text-right tabular-nums", toneOf(r.change7dPct))}>{fmtPct(r.change7dPct)}</td>

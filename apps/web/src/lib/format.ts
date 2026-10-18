@@ -1,9 +1,4 @@
-const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
-
-export const fmtUsd = (cents: number | null | undefined) => (cents == null ? "—" : usd.format(cents / 100));
-
-export const fmtSignedUsd = (cents: number | null | undefined) =>
-  cents == null ? "—" : (cents > 0 ? "+" : "") + usd.format(cents / 100);
+// Money formatting lives in ./money.ts (depends on the selected currency).
 
 export const fmtPct = (pct: number | null | undefined) =>
   pct == null ? "—" : `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%`;

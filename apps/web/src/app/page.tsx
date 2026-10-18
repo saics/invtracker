@@ -5,12 +5,14 @@ import { PortfolioChart } from "@/components/charts";
 import { usePriceProvider } from "@/components/providers";
 import { Card, CardHeader, Empty, ErrorText, Stat } from "@/components/ui";
 import { usePortfolio, useStatus } from "@/lib/api";
-import { fmtPct, fmtSignedUsd, fmtUsd, PROVIDER_LABELS, toneOf } from "@/lib/format";
+import { fmtPct, PROVIDER_LABELS, toneOf } from "@/lib/format";
+import { useMoney } from "@/lib/money";
 
 export default function Dashboard() {
   const { provider } = usePriceProvider();
   const { data: p, error, isLoading } = usePortfolio(provider);
   const status = useStatus().data;
+  const money = useMoney();
 
   if (status && status.itemCount === 0) {
     return (
@@ -33,16 +35,16 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat
           label="Vrijednost inventoryja"
-          value={isLoading ? "…" : fmtUsd(p?.value)}
+          value={isLoading ? "…" : money.fmt(p?.value)}
           sub={p && `${p.pricedCount}/${p.heldCount} itema s cijenom · ${PROVIDER_LABELS[provider]}`}
         />
         <Stat
           label="Uloženo (držim)"
-          value={isLoading ? "…" : fmtUsd(p?.invested)}
+          value={isLoading ? "…" : money.fmt(p?.invested)}
           sub={p?.untrackedCostCount ? `${p.untrackedCostCount} itema bez kupovne cijene` : "svi itemi imaju kupovnu cijenu"}
         />
-        <Stat label="Nerealizirani P&L" value={fmtSignedUsd(p?.unrealized)} sub={fmtPct(unrealPct)} tone={toneOf(p?.unrealized)} />
-        <Stat label="Realizirani P&L" value={fmtSignedUsd(p?.realized)} sub="prodani itemi, neto od fee-a" tone={toneOf(p?.realized)} />
+        <Stat label="Nerealizirani P&L" value={money.fmtSigned(p?.unrealized)} sub={fmtPct(unrealPct)} tone={toneOf(p?.unrealized)} />
+        <Stat label="Realizirani P&L" value={money.fmtSigned(p?.realized)} sub="prodani itemi, neto od fee-a" tone={toneOf(p?.realized)} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">

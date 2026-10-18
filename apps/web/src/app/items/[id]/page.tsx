@@ -8,11 +8,13 @@ import { PriceHistoryChart, PROVIDER_COLORS } from "@/components/charts";
 import { TxForm } from "@/components/tx-form";
 import { Badge, Card, CardHeader, Empty, ErrorText, Stat } from "@/components/ui";
 import { useItem } from "@/lib/api";
-import { fmtDate, fmtFloat, fmtPct, fmtSignedUsd, fmtUsd, PLATFORM_LABELS, PROVIDER_LABELS, toneOf } from "@/lib/format";
+import { fmtDate, fmtFloat, fmtPct, PLATFORM_LABELS, PROVIDER_LABELS, toneOf } from "@/lib/format";
+import { useMoney } from "@/lib/money";
 
 export default function ItemPage({ params }: { params: Promise<{ id: string }> }) {
   const id = Number(use(params).id);
   const { data, error, isLoading } = useItem(id);
+  const money = useMoney();
 
   if (isLoading) return <Empty>Učitavam…</Empty>;
   if (!data) return <ErrorText error={error ?? "Item nije pronađen"} />;
@@ -51,7 +53,7 @@ export default function ItemPage({ params }: { params: Promise<{ id: string }> }
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Kupljeno" value={fmtUsd(cost)} sub={buy ? `${PLATFORM_LABELS[buy.platform]} · ${fmtDate(buy.date)}` : "nema zapisa"} />
+        <Stat label="Kupljeno" value={money.fmt(cost)} sub={buy ? `${PLATFORM_LABELS[buy.platform]} · ${fmtDate(buy.date)}` : "nema zapisa"} />
         {providers.map((p) => {
           const price = latest(p);
           const pnl = cost != null && price != null ? price - cost : null;
@@ -59,16 +61,16 @@ export default function ItemPage({ params }: { params: Promise<{ id: string }> }
             <Stat
               key={p}
               label={PROVIDER_LABELS[p]}
-              value={fmtUsd(price)}
-              sub={pnl != null ? <span className={toneOf(pnl)}>{`${fmtSignedUsd(pnl)} (${fmtPct((pnl / cost!) * 100)})`}</span> : undefined}
+              value={money.fmt(price)}
+              sub={pnl != null ? <span className={toneOf(pnl)}>{`${money.fmtSigned(pnl)} (${fmtPct((pnl / cost!) * 100)})`}</span> : undefined}
             />
           );
         })}
       </div>
       {sell && (
         <p className={`text-sm ${toneOf(cost != null ? sell.price - sell.fee - cost : null)}`}>
-          Prodano {fmtDate(sell.date)} na {PLATFORM_LABELS[sell.platform]} za {fmtUsd(sell.price)} (neto {fmtUsd(sell.price - sell.fee)})
-          {cost != null && ` · P&L ${fmtSignedUsd(sell.price - sell.fee - cost)}`}
+          Prodano {fmtDate(sell.date)} na {PLATFORM_LABELS[sell.platform]} za {money.fmt(sell.price)} (neto {money.fmt(sell.price - sell.fee)})
+          {cost != null && ` · P&L ${money.fmtSigned(sell.price - sell.fee - cost)}`}
         </p>
       )}
 
@@ -104,7 +106,7 @@ export default function ItemPage({ params }: { params: Promise<{ id: string }> }
                 <Badge>{t.type === "buy" ? "kupnja" : "prodaja"}</Badge>
                 <span className="text-muted">{fmtDate(t.date)}</span>
                 <span>{PLATFORM_LABELS[t.platform]}</span>
-                <span className="ml-auto tabular-nums">{fmtUsd(t.price)}</span>
+                <span className="ml-auto tabular-nums">{money.fmt(t.price)}</span>
               </li>
             ))}
           </ul>
