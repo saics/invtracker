@@ -1,4 +1,4 @@
-import { availableProviders, getPriceJob, lastPriceUpdate, nextScheduledRun } from "@inv/core";
+import { csfloatEnabled, getPriceJob, lastPriceUpdate, nextScheduledRun } from "@inv/core";
 import { items, transactions } from "@inv/db";
 import { sql } from "drizzle-orm";
 import { db, handler } from "@/lib/server";
@@ -14,7 +14,7 @@ export const GET = handler(async () => {
   return {
     steamIdSet: /^\d{17}$/.test(process.env.STEAM_ID ?? ""),
     csfloatKeySet: !!process.env.CSFLOAT_API_KEY,
-    providers: availableProviders(),
+    sources: csfloatEnabled() ? ["Skinport", "CSFloat"] : ["Skinport"],
     itemCount: i?.n ?? 0,
     transactionCount: t?.n ?? 0,
     priceJob: getPriceJob(),

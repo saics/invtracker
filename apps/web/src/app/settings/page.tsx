@@ -3,7 +3,6 @@
 import { Check, X } from "lucide-react";
 import { Card, CardHeader, Empty } from "@/components/ui";
 import { useStatus } from "@/lib/api";
-import { PROVIDER_LABELS } from "@/lib/format";
 
 function Row({ ok, label, hint }: { ok: boolean; label: string; hint: string }) {
   return (
@@ -50,7 +49,7 @@ export default function SettingsPage() {
           </li>
           <li className="flex justify-between px-5 py-2.5">
             <span className="text-muted">Aktivni izvori cijena</span>
-            {s.providers.map((p) => PROVIDER_LABELS[p]).join(", ")}
+            {s.sources.join(", ")}
           </li>
           <li className="flex justify-between px-5 py-2.5">
             <span className="text-muted">Zadnje osvježavanje cijena</span>
@@ -67,7 +66,7 @@ export default function SettingsPage() {
           </div>
         )}
         <p className="px-5 py-4 text-xs text-muted">
-          Za automatsko praćenje cijena pokreni <code>pnpm prices:schedule</code> u zasebnom terminalu (zadano svakih 6h).
+          Cijene se osvježavaju automatski dok aplikacija radi (<code>PRICE_CRON</code>, zadano svaka 2 h).
         </p>
       </Card>
     </div>

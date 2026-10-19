@@ -1,6 +1,6 @@
 # InvTracker
 
-CS2 inventory tracker: prati vrijednost inventoryja kroz vrijeme po izvoru cijena (CSFloat listing, CSFloat buy order, Steam Market) te kupnje/prodaje (gdje, kada, za koliko) i P&L.
+CS2 inventory tracker: prati tržišnu vrijednost inventoryja kroz vrijeme (CSFloat + Skinport) te kupnje/prodaje (gdje, kada, za koliko) i P&L.
 
 ## Struktura
 
@@ -23,7 +23,7 @@ pnpm dev               # migrira bazu i pokreće http://localhost:3000
 ```
 
 1. **Sync** u headeru povlači javni Steam inventory.
-2. **Cijene** dohvaća cijene za sve iteme (Steam je spor: ~3.5 s po itemu zbog rate limita).
+2. **Cijene** odmah osvježava cijene (inače se to radi automatski, vidi niže).
 3. **Transakcije → Uvezi s CSFloata** povlači sve kupnje i prodaje s CSFloata (bez duplikata pri ponovnom uvozu).
 4. Kupnje sa Skinswapa / CS.Moneyja / DMarketa unesi ručno ili CSV-om:
 
@@ -43,11 +43,25 @@ pnpm prices:schedule   # isto, ali bez weba (samostalni proces)
 pnpm prices:update     # jednokratno
 ```
 
-### Povijest cijena
+### Izvori cijena i tržišna vrijednost
 
-- **CSFloat listing / buy order** su trenutne ponude: povijest za njih ne postoji, pa graf počinje od prvog snimka u aplikaciji.
-- **Steam Market**: povijest prodaja (zadnjih 365 dana, dnevni prosjek ponderiran brojem kupnji) se jednom po itemu povuče sa Steam stranice itema, a dalje se nastavlja živim snimkama. Steam vraća cijene u valuti prema IP-u (kod nas EUR), pa se pretvaraju u USD po ECB tečaju za taj dan.
-- **CSFloat · prodaje (dnevno)**: dnevni prosjek prodaja s CSFloata za zadnjih 365 dana, osvježava se svaki put. To je prosjek svih floatova/patterna tog imena, pa za rijetke iteme zna skakati.
+Sve cijene se spremaju kao **jedna točka po itemu, izvoru i danu** (tablica `daily_prices`, UTC dan); ponovno osvježavanje istog dana prepiše tu točku.
+
+| Izvor | Što | Kako |
+|---|---|---|
+| CSFloat prodaje | prosjek prodaja po danu + broj prodaja | 365 dana unazad, po imenu itema |
+| CSFloat listing / buy order | kupi odmah / prodaj odmah | po imenu itema |
+| Skinport listing | najniža cijena + broj listinga | jedan poziv za sve iteme |
+| Skinport prodaje | medijan prodaja zadnjih 7 dana + volumen | jedan poziv za sve iteme |
+
+**Tržišna vrijednost** (`packages/core/src/market.ts`) je jedna cijena po itemu i danu, na kojoj se računaju vrijednost inventoryja, P&L i grafovi. Uzima prvo što postoji:
+
+1. CSFloat prodaje zadnjih 7 dana (barem 3 prodaje), inače zadnjih 30 dana, kao medijan ponderiran brojem prodaja, pa jedna čudna prodaja (rijedak float, stickeri) ne pomiče vrijednost;
+2. Skinport medijan prodaja za 7 dana;
+3. CSFloat najniži listing;
+4. Skinport najniži listing.
+
+Uz vrijednost se pamti izvor (`basis`). Izvori 2–4 vrijede najviše 3 dana. Za iteme vrijedne 20 $ ili više dodatno se traži najjeftiniji CSFloat listing sa sličnim floatom (±0.01), kao orijentacija za taj konkretni item. Medalje, značke i ostali itemi koji se ne mogu prodati se preskaču.
 
 Graf vrijednosti broji item od datuma kupnje (ili od prvog synca, ako je bio tu od početka) do prodaje, pa P&L kroz vrijeme uključuje i kasnije prodane iteme dok su bili tvoji.
 

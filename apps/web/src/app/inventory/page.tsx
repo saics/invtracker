@@ -4,10 +4,9 @@ import { ArrowDownUp } from "lucide-react";
 import Link from "next/link";
 import { useDeferredValue, useMemo, useState } from "react";
 import { CHART_RANGES, PortfolioChart, Sparkline, type ChartMode } from "@/components/charts";
-import { usePriceProvider } from "@/components/providers";
 import { Badge, Card, CardHeader, cn, Empty, ErrorText, Input, Segmented } from "@/components/ui";
 import { useInventory, usePortfolio, type InventoryRowJ } from "@/lib/api";
-import { fmtDate, fmtPct, PLATFORM_LABELS, toneOf } from "@/lib/format";
+import { BASIS_LABELS, fmtDate, fmtPct, PLATFORM_LABELS, toneOf } from "@/lib/format";
 import { useMoney } from "@/lib/money";
 
 const TABS = [
@@ -29,8 +28,7 @@ const sorters: Record<SortKey, (r: InventoryRowJ) => number | string | null> = {
 };
 
 export default function InventoryPage() {
-  const { provider } = usePriceProvider();
-  const { data, error, isLoading } = useInventory(provider);
+  const { data, error, isLoading } = useInventory();
   const money = useMoney();
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("held");
   const [q, setQ] = useState("");
@@ -61,7 +59,7 @@ export default function InventoryPage() {
   const chartIds = useDeferredValue(useMemo(() => rows.map((r) => r.id).sort((a, b) => a - b), [rows]));
   const [chartMode, setChartMode] = useState<ChartMode>("value");
   const [chartDays, setChartDays] = useState(90);
-  const chart = usePortfolio(provider, { days: chartDays, ids: chartIds });
+  const chart = usePortfolio({ days: chartDays, ids: chartIds });
   const last = chart.data?.history.at(-1);
 
   const th = (key: SortKey, label: string, className?: string) => (
@@ -180,7 +178,9 @@ export default function InventoryPage() {
                       </Link>
                     )}
                   </td>
-                  <td className="px-3 text-right tabular-nums">{money.fmt(r.status === "sold" ? r.proceeds : r.price)}</td>
+                  <td className="px-3 text-right tabular-nums" title={r.status !== "sold" && r.priceBasis ? `${BASIS_LABELS[r.priceBasis] ?? r.priceBasis} · ${r.priceDay}` : undefined}>
+                    {money.fmt(r.status === "sold" ? r.proceeds : r.price)}
+                  </td>
                   <td className={cn("px-3 text-right tabular-nums", toneOf(r.pnl))}>
                     {money.fmtSigned(r.pnl)}
                     <div className="text-xs">{fmtPct(r.pnlPct)}</div>

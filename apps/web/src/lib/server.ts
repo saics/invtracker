@@ -1,4 +1,4 @@
-import { getDb, loadRootEnv, PRICE_PROVIDERS, type PriceProvider } from "@inv/db";
+import { getDb, loadRootEnv } from "@inv/db";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
@@ -6,11 +6,6 @@ import { ZodError } from "zod";
 loadRootEnv();
 
 export const db = () => getDb();
-
-export function parseProvider(req: Request): PriceProvider {
-  const p = new URL(req.url).searchParams.get("provider");
-  return (PRICE_PROVIDERS as readonly string[]).includes(p ?? "") ? (p as PriceProvider) : "csfloat_listing";
-}
 
 /** Wraps a route handler with uniform JSON error responses. */
 export function handler<A extends unknown[]>(fn: (...args: A) => Promise<unknown>) {

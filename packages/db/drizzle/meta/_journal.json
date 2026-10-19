@@ -8,6 +8,20 @@
       "when": 1792327721289,
       "tag": "0000_steady_stepford_cuckoos",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792361028706,
+      "tag": "0001_daily_prices",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792361045350,
+      "tag": "0002_drop_price_snapshots",
+      "breakpoints": true
     }
   ]
 }

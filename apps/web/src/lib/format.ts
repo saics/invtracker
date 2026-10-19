@@ -22,12 +22,23 @@ export const fmtFloat = (f: number | null | undefined) => (f == null ? "—" : f
 export const toneOf = (n: number | null | undefined) =>
   n == null || n === 0 ? "text-muted" : n > 0 ? "text-up" : "text-down";
 
-export const PROVIDER_LABELS = {
+export const SOURCE_LABELS = {
+  market: "Tržišna vrijednost",
+  csfloat_sales: "CSFloat · prodaje",
   csfloat_listing: "CSFloat · listing",
   csfloat_buyorder: "CSFloat · buy order",
-  csfloat_sales: "CSFloat · prodaje (dnevno)",
-  steam: "Steam Market",
+  skinport_sales: "Skinport · prodaje (7d)",
+  skinport_listing: "Skinport · listing",
 } as const;
+
+/** Where a market value came from (see core/market.ts). */
+export const BASIS_LABELS: Record<string, string> = {
+  csfloat_sales_7d: "CSFloat prodaje, 7 dana",
+  csfloat_sales_30d: "CSFloat prodaje, 30 dana",
+  skinport_sales_7d: "Skinport prodaje, 7 dana",
+  csfloat_listing: "CSFloat najniži listing",
+  skinport_listing: "Skinport najniži listing",
+};
 
 export const PLATFORM_LABELS: Record<string, string> = {
   csfloat: "CSFloat",

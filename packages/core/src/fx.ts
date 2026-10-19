@@ -39,30 +39,3 @@ export async function getUsdEurRate(db: DB): Promise<FxRate> {
   }
 }
 
-/**
- * USD→EUR rate lookup by date for converting historical prices (ECB daily rates; weekends
- * and holidays use the previous business day). Falls back to the current rate.
- */
-export async function usdEurRateAt(db: DB, since: Date): Promise<(d: Date) => number> {
-  const current = (await getUsdEurRate(db)).usdToEur;
-  try {
-    const res = await fetchJson<{ rates: Record<string, { EUR?: number }> }>(
-      `https://api.frankfurter.dev/v1/${since.toISOString().slice(0, 10)}..?base=USD&symbols=EUR`,
-      { retries: 1 },
-    );
-    const days = Object.entries(res.rates)
-      .filter(([, r]) => r.EUR)
-      .map(([day, r]) => ({ t: Date.parse(day), rate: r.EUR! }))
-      .sort((a, b) => a.t - b.t);
-    return (d) => {
-      let rate = days[0]?.rate ?? current;
-      for (const x of days) {
-        if (x.t > d.getTime()) break;
-        rate = x.rate;
-      }
-      return rate;
-    };
-  } catch {
-    return () => current;
-  }
-}

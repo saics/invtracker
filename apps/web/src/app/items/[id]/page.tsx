@@ -1,14 +1,14 @@
 "use client";
 
-import type { ItemSticker, PriceProvider } from "@inv/db/schema";
+import type { ItemSticker, PriceSource } from "@inv/db/schema";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { use, useState } from "react";
-import { CHART_RANGES, PriceHistoryChart, PROVIDER_COLORS, type ChartMode } from "@/components/charts";
+import { CHART_RANGES, PriceHistoryChart, SOURCE_COLORS, type ChartMode } from "@/components/charts";
 import { TxForm } from "@/components/tx-form";
 import { Badge, Card, CardHeader, Empty, ErrorText, Segmented, Stat } from "@/components/ui";
 import { useItem } from "@/lib/api";
-import { fmtDate, fmtFloat, fmtPct, PLATFORM_LABELS, PROVIDER_LABELS, toneOf } from "@/lib/format";
+import { BASIS_LABELS, fmtDate, fmtFloat, fmtPct, PLATFORM_LABELS, SOURCE_LABELS, toneOf } from "@/lib/format";
 import { useMoney } from "@/lib/money";
 
 const KIND_LABELS: Record<ItemSticker["kind"], string> = { sticker: "Sticker", patch: "Patch", charm: "Charm" };
@@ -57,22 +57,38 @@ function StickerRow({ stickers }: { stickers: (ItemSticker | string)[] }) {
   );
 }
 
+/** Latest observation of a source if it is recent enough to quote (live sources go stale fast). */
+function recentPoint(points: { day: string; price: number }[], maxAgeDays = 3) {
+  const p = points.at(-1);
+  return p && Date.now() - Date.parse(`${p.day}T00:00:00Z`) <= (maxAgeDays + 1) * 86_400_000 ? p : null;
+}
+
 export default function ItemPage({ params }: { params: Promise<{ id: string }> }) {
   const id = Number(use(params).id);
   const { data, error, isLoading } = useItem(id);
   const money = useMoney();
   const [mode, setMode] = useState<ChartMode>("value");
   const [days, setDays] = useState<number>(90);
+  const [compare, setCompare] = useState(false);
 
   if (isLoading) return <Empty>Učitavam…</Empty>;
   if (!data) return <ErrorText error={error ?? "Item nije pronađen"} />;
 
-  const { item, transactions, history } = data;
+  const { item, transactions, history, quote } = data;
   const buy = transactions.find((t) => t.type === "buy");
   const sell = transactions.find((t) => t.type === "sell");
   const cost = buy ? buy.price + buy.fee : null;
-  const latest = (p: PriceProvider) => history[p].at(-1)?.price ?? null;
-  const providers = Object.keys(PROVIDER_LABELS) as PriceProvider[];
+  const market = history.market.at(-1) ?? null;
+  const marketPnl = cost != null && market ? market.price - cost : null;
+  const buyOrder = recentPoint(history.csfloat_buyorder);
+  const asks = [
+    { label: "CSFloat", p: recentPoint(history.csfloat_listing) },
+    { label: "Skinport", p: recentPoint(history.skinport_listing) },
+  ].filter((a) => a.p) as { label: string; p: { price: number } }[];
+  const cheapest = asks.sort((a, b) => a.p.price - b.p.price)[0];
+  const shown = (compare ? (Object.keys(SOURCE_LABELS) as PriceSource[]) : (["market"] as PriceSource[])).filter(
+    (src) => history[src].length,
+  );
 
   return (
     <div className="space-y-6">
@@ -103,18 +119,31 @@ export default function ItemPage({ params }: { params: Promise<{ id: string }> }
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat label="Kupljeno" value={money.fmt(cost)} sub={buy ? `${PLATFORM_LABELS[buy.platform]} · ${fmtDate(buy.date)}` : "nema zapisa"} />
-        {providers.map((p) => {
-          const price = latest(p);
-          const pnl = cost != null && price != null ? price - cost : null;
-          return (
-            <Stat
-              key={p}
-              label={PROVIDER_LABELS[p]}
-              value={money.fmt(price)}
-              sub={pnl != null ? <span className={toneOf(pnl)}>{`${money.fmtSigned(pnl)} (${fmtPct((pnl / cost!) * 100)})`}</span> : undefined}
-            />
-          );
-        })}
+        <Stat
+          label="Tržišna vrijednost"
+          value={money.fmt(market?.price)}
+          sub={
+            <>
+              {marketPnl != null && (
+                <span className={toneOf(marketPnl)}>{`${money.fmtSigned(marketPnl)} (${fmtPct((marketPnl / cost!) * 100)}) · `}</span>
+              )}
+              {market?.basis ? BASIS_LABELS[market.basis] ?? market.basis : "nema podataka"}
+            </>
+          }
+        />
+        <Stat label="Prodaj odmah" value={money.fmt(buyOrder?.price)} sub="najviši CSFloat buy order" />
+        <Stat label="Kupi odmah" value={money.fmt(cheapest?.p.price)} sub={cheapest ? `najniži listing · ${cheapest.label}` : "nema listinga"} />
+        <Stat
+          label="Sličan float"
+          value={quote ? money.fmt(quote.price) : "—"}
+          sub={
+            quote
+              ? `CSFloat listing, float ${quote.floatMin.toFixed(3)}–${quote.floatMax.toFixed(3)}`
+              : item.floatValue == null
+                ? "float nepoznat"
+                : "za iteme od 20 $ naviše"
+          }
+        />
       </div>
       {sell && (
         <p className={`text-sm ${toneOf(cost != null ? sell.price - sell.fee - cost : null)}`}>
@@ -128,6 +157,14 @@ export default function ItemPage({ params }: { params: Promise<{ id: string }> }
           title="Povijest cijena"
           right={
             <div className="flex flex-wrap items-center gap-2">
+              <Segmented
+                options={[
+                  { value: "market", label: "Tržišna" },
+                  { value: "all", label: "Svi izvori" },
+                ]}
+                value={compare ? "all" : "market"}
+                onChange={(v) => setCompare(v === "all")}
+              />
               {cost != null && (
                 <Segmented
                   options={[
@@ -143,20 +180,18 @@ export default function ItemPage({ params }: { params: Promise<{ id: string }> }
           }
         />
         <div className="flex flex-wrap gap-3 px-5 text-xs text-muted">
-          {providers
-            .filter((p) => history[p].length)
-            .map((p) => (
-              <span key={p} className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full" style={{ background: PROVIDER_COLORS[p] }} />
-                {PROVIDER_LABELS[p]}
-              </span>
-            ))}
+          {shown.map((src) => (
+            <span key={src} className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ background: SOURCE_COLORS[src] }} />
+              {SOURCE_LABELS[src]}
+            </span>
+          ))}
         </div>
         <div className="px-2 pb-3">
-          {providers.some((p) => history[p].length) ? (
+          {shown.length ? (
             <PriceHistoryChart
-              history={history}
-              labels={PROVIDER_LABELS}
+              history={Object.fromEntries(shown.map((src) => [src, history[src]]))}
+              labels={SOURCE_LABELS}
               cost={cost}
               buyAt={buy?.date}
               sellAt={sell?.date}
@@ -164,7 +199,7 @@ export default function ItemPage({ params }: { params: Promise<{ id: string }> }
               sinceMs={Date.now() - days * 86_400_000}
             />
           ) : (
-            <Empty>Još nema snimaka cijena za ovaj item.</Empty>
+            <Empty>Još nema cijena za ovaj item.</Empty>
           )}
           {cost == null && <p className="px-3 text-xs text-muted">Dodaj kupnju da vidiš P&L na grafu.</p>}
         </div>

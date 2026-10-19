@@ -1,6 +1,6 @@
 "use client";
 
-import type { PriceProvider } from "@inv/db";
+import type { PriceSource } from "@inv/db/schema";
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useMoney } from "@/lib/money";
 
@@ -80,16 +80,22 @@ export function PortfolioChart({
   );
 }
 
-export const PROVIDER_COLORS: Record<PriceProvider, string> = {
+export const SOURCE_COLORS: Record<PriceSource, string> = {
+  market: "#e8e8ea",
+  csfloat_sales: "#f5b65b",
   csfloat_listing: "#7c9cff",
   csfloat_buyorder: "#3ecf8e",
-  csfloat_sales: "#f5b65b",
-  steam: "#c7a2ff",
+  skinport_sales: "#ff8fb1",
+  skinport_listing: "#c7a2ff",
 };
 
+const dayMs = (day: string) => Date.parse(`${day}T00:00:00Z`);
+const utcDay = (d: string) => Math.floor(new Date(d).getTime() / 86_400_000) * 86_400_000;
+
 /**
- * Item price history per provider. In "pnl" mode every series is shown as price minus
- * cost, so the zero line is break-even. Buy/sell dates are marked when in range.
+ * Daily item prices per source; the market value is drawn bold, other sources thin. In "pnl"
+ * mode every series is shown as price minus cost, so the zero line is break-even. Buy/sell
+ * days are marked when in range.
  */
 export function PriceHistoryChart({
   history,
@@ -100,8 +106,8 @@ export function PriceHistoryChart({
   mode = "value",
   sinceMs = 0,
 }: {
-  history: Record<PriceProvider, { price: number; ts: string }[]>;
-  labels: Record<PriceProvider, string>;
+  history: Partial<Record<PriceSource, { day: string; price: number }[]>>;
+  labels: Record<PriceSource, string>;
   cost?: number | null;
   buyAt?: string | null;
   sellAt?: string | null;
@@ -109,25 +115,25 @@ export function PriceHistoryChart({
   sinceMs?: number;
 }) {
   const pnl = mode === "pnl" && cost != null;
-  // Merge provider series onto a shared time axis.
+  // Merge source series onto a shared day axis.
   const rows = new Map<number, Record<string, number>>();
-  for (const [p, pts] of Object.entries(history)) {
-    for (const pt of pts) {
-      const t = new Date(pt.ts).getTime();
-      if (t < sinceMs) continue;
+  for (const [src, pts] of Object.entries(history)) {
+    for (const pt of pts ?? []) {
+      const t = dayMs(pt.day);
+      if (t < sinceMs - 86_400_000) continue;
       const row = rows.get(t) ?? { t };
-      row[p] = pnl ? pt.price - cost : pt.price;
+      row[src] = pnl ? pt.price - cost : pt.price;
       rows.set(t, row);
     }
   }
   const data = [...rows.values()].sort((a, b) => a.t! - b.t!);
-  const providers = (Object.keys(history) as PriceProvider[]).filter((p) => data.some((r) => r[p] != null));
+  const sources = (Object.keys(history) as PriceSource[]).filter((src) => data.some((r) => r[src] != null));
   const money = useMoney();
   const first = data[0]?.t ?? 0;
   const marks = [
     { at: buyAt, label: "kupljeno" },
     { at: sellAt, label: "prodano" },
-  ].filter((m): m is { at: string; label: string } => !!m.at && new Date(m.at).getTime() >= Math.max(first, sinceMs));
+  ].filter((m): m is { at: string; label: string } => !!m.at && utcDay(m.at) >= first);
 
   return (
     <ResponsiveContainer width="100%" height={280}>
@@ -138,7 +144,7 @@ export function PriceHistoryChart({
         <Tooltip
           {...tooltipStyle}
           formatter={(v) => (pnl ? money.fmtSigned(Number(v)) : money.fmt(Number(v)))}
-          labelFormatter={(t) => new Date(Number(t)).toLocaleString("hr-HR")}
+          labelFormatter={(t) => new Date(Number(t)).toLocaleDateString("hr-HR")}
         />
         {pnl ? (
           <ReferenceLine y={0} stroke="#5b5b66" strokeDasharray="4 4" label={{ value: "break-even", position: "insideTopLeft", fill: "#5b5b66", fontSize: 11 }} />
@@ -148,10 +154,21 @@ export function PriceHistoryChart({
           )
         )}
         {marks.map((m) => (
-          <ReferenceLine key={m.label} x={new Date(m.at).getTime()} stroke="#5b5b66" label={{ value: m.label, position: "top", fill: "#8b8b96", fontSize: 11 }} />
+          <ReferenceLine key={m.label} x={utcDay(m.at)} stroke="#5b5b66" label={{ value: m.label, position: "top", fill: "#8b8b96", fontSize: 11 }} />
         ))}
-        {providers.map((p) => (
-          <Line key={p} type="monotone" dataKey={p} name={labels[p]} stroke={PROVIDER_COLORS[p]} strokeWidth={p === "csfloat_sales" ? 1.5 : 2} dot={false} connectNulls isAnimationActive={false} />
+        {sources.map((src) => (
+          <Line
+            key={src}
+            type="monotone"
+            dataKey={src}
+            name={labels[src]}
+            stroke={SOURCE_COLORS[src]}
+            strokeWidth={src === "market" ? 2.5 : 1.25}
+            strokeOpacity={src === "market" ? 1 : 0.8}
+            dot={false}
+            connectNulls
+            isAnimationActive={false}
+          />
         ))}
       </LineChart>
     </ResponsiveContainer>

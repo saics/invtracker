@@ -1,22 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { computeItemPnl, ownershipWindow } from "../src/portfolio";
-import { parseSteamHistoryPage, parseSteamPrice, steamDaily } from "../src/providers/steam";
+import { computeMarketSeries, weightedMedian } from "../src/market";
+import { parseSkinportItems, parseSkinportSales } from "../src/providers/skinport";
 import { csfloatTradeToRow, parseTransactionsCsv, skinswapTxToRows } from "../src/transactions";
 import { normalizeInventory, parseStickers, withInspectData } from "../src/inventory";
 import { decodeInspectCertificate } from "../src/inspect";
-
-describe("parseSteamPrice", () => {
-  it.each([
-    ["$1.23", 123],
-    ["$1,234.56", 123456],
-    ["$1,234", 123400],
-    ["1.234,56€", 123456],
-    ["12,--€", 1200],
-    ["0,03€", 3],
-    ["", null],
-    [undefined, null],
-  ])("%s -> %s", (raw, cents) => expect(parseSteamPrice(raw)).toBe(cents));
-});
 
 describe("computeItemPnl", () => {
   it("unrealized for held items", () => {
@@ -199,48 +187,74 @@ describe("ownershipWindow", () => {
   });
 });
 
-describe("parseSteamHistoryPage", () => {
-  const page = (data: unknown) =>
-    `<html><script type="application/json" id="valve-ssr-data" nonce="x">${JSON.stringify(data)}</script></html>`;
-  const query = (name: string, ecurrency: number, prices: unknown[]) => ({
-    queryKey: ["market", "pricehistory", 730, name],
-    state: { data: { ecurrency, prices } },
+describe("weightedMedian", () => {
+  it("weights values by count", () => {
+    expect(weightedMedian([{ price: 100, weight: 1 }, { price: 200, weight: 5 }, { price: 900, weight: 1 }])).toBe(200);
   });
+  it("is null without weight", () => expect(weightedMedian([{ price: 100, weight: 0 }])).toBeNull());
+});
 
-  it("reads every variant's series from the embedded query state", () => {
-    const html = page({
-      renderContext: {
-        queryData: {
-          queries: [
-            { queryKey: ["market", "listing", 730], state: { data: {} } },
-            query("AK-47 | Redline (Field-Tested)", 3, [
-              { time: 1700086400, price_median: 12.5, purchases: 3 },
-              { time: 1700000000, price_median: 10, purchases: 1 },
-            ]),
-            query("StatTrak™ AK-47 | Redline (Field-Tested)", 3, [{ time: 1700000000, price_median: 30, purchases: 1 }]),
-          ],
-        },
+describe("computeMarketSeries", () => {
+  const empty = { csfloatSales: [], skinportSales: [], csfloatListing: [], skinportListing: [] };
+
+  it("uses CSFloat sales over 7 days and ignores a single outlier day", () => {
+    const series = computeMarketSeries(
+      {
+        ...empty,
+        csfloatSales: [
+          { day: "2026-10-10", price: 1000, volume: 4 },
+          { day: "2026-10-11", price: 1100, volume: 4 },
+          { day: "2026-10-12", price: 9000, volume: 1 },
+        ],
       },
-    });
-    const res = parseSteamHistoryPage(html)!;
-    expect(res.currency).toBe("EUR");
-    expect([...res.series.keys()]).toHaveLength(2);
-    expect(res.series.get("AK-47 | Redline (Field-Tested)")!.map((p) => p.price)).toEqual([10, 12.5]);
-  });
-
-  it("averages hourly points per day, weighted by purchases", () => {
-    const day = 1700006400; // 00:00 UTC
-    expect(
-      steamDaily([
-        { time: day + 3600, price_median: 10, purchases: 3 },
-        { time: day + 7200, price_median: 20, purchases: 1 },
-        { time: day + 86_400, price_median: 5, purchases: 0 },
-      ]).map((p) => [p.ts.getTime() / 1000, p.price]),
-    ).toEqual([
-      [day, 12.5],
-      [day + 86_400, 5],
+      "2026-10-12",
+    );
+    expect(series.map((p) => [p.day, p.price, p.basis])).toEqual([
+      ["2026-10-10", 1000, "csfloat_sales_7d"],
+      ["2026-10-11", 1000, "csfloat_sales_7d"],
+      ["2026-10-12", 1100, "csfloat_sales_7d"],
     ]);
   });
 
-  it("returns null without embedded data", () => expect(parseSteamHistoryPage("<html></html>")).toBeNull());
+  it("widens to 30 days for thinly traded items, then falls back to Skinport and listings", () => {
+    const series = computeMarketSeries(
+      {
+        csfloatSales: [{ day: "2026-09-01", price: 500, volume: 3 }],
+        skinportSales: [{ day: "2026-10-15", price: 700, volume: 2 }],
+        csfloatListing: [{ day: "2026-10-17", price: 650 }],
+        skinportListing: [{ day: "2026-10-19", price: 800 }],
+      },
+      "2026-10-23",
+    );
+    const at = (day: string) => series.find((p) => p.day === day);
+    expect(at("2026-09-05")).toMatchObject({ price: 500, basis: "csfloat_sales_7d" });
+    expect(at("2026-09-15")).toMatchObject({ price: 500, basis: "csfloat_sales_30d" });
+    expect(at("2026-10-16")).toMatchObject({ price: 700, basis: "skinport_sales_7d" });
+    // Observations older than 3 days are not used, so each source hands over to the next one.
+    expect(at("2026-10-19")).toMatchObject({ price: 650, basis: "csfloat_listing" });
+    expect(at("2026-10-21")).toMatchObject({ price: 800, basis: "skinport_listing" });
+    expect(at("2026-10-23")).toBeUndefined();
+  });
+
+  it("returns nothing without observations", () => expect(computeMarketSeries(empty, "2026-10-12")).toEqual([]));
+});
+
+describe("Skinport parsing", () => {
+  it("converts to cents and prefers the base entry over Doppler phases", () => {
+    const items = parseSkinportItems([
+      { market_hash_name: "★ Karambit | Doppler (Factory New)", version: "Phase 2", min_price: 900, median_price: 950, quantity: 2 },
+      { market_hash_name: "★ Karambit | Doppler (Factory New)", version: null, min_price: 700.5, median_price: 800, quantity: 9 },
+      { market_hash_name: "Empty", version: null, min_price: null, median_price: null, quantity: 0 },
+    ]);
+    expect(items.get("★ Karambit | Doppler (Factory New)")).toEqual({ minPrice: 70050, quantity: 9 });
+    expect(items.has("Empty")).toBe(false);
+  });
+
+  it("reads 7 and 30 day sale stats", () => {
+    const stats = { min: 1, max: 2, avg: 1.5, median: 1.4, volume: 3 };
+    const sales = parseSkinportSales([
+      { market_hash_name: "X", version: null, last_24_hours: stats, last_7_days: stats, last_30_days: { ...stats, median: null, volume: 0 }, last_90_days: stats },
+    ]);
+    expect(sales.get("X")).toEqual({ median7d: 140, volume7d: 3, median30d: null, volume30d: 0 });
+  });
 });

@@ -3,16 +3,14 @@
 import Link from "next/link";
 import { useState } from "react";
 import { CHART_RANGES, PortfolioChart, type ChartMode } from "@/components/charts";
-import { usePriceProvider } from "@/components/providers";
 import { Card, CardHeader, Empty, ErrorText, Segmented, Stat } from "@/components/ui";
 import { usePortfolio, useStatus } from "@/lib/api";
-import { fmtPct, PROVIDER_LABELS, toneOf } from "@/lib/format";
+import { fmtPct, toneOf } from "@/lib/format";
 import { useMoney } from "@/lib/money";
 
 export default function Dashboard() {
-  const { provider } = usePriceProvider();
   const [days, setDays] = useState(90);
-  const { data: p, error, isLoading } = usePortfolio(provider, { days });
+  const { data: p, error, isLoading } = usePortfolio({ days });
   const status = useStatus().data;
   const money = useMoney();
   const [mode, setMode] = useState<ChartMode>("value");
@@ -39,7 +37,7 @@ export default function Dashboard() {
         <Stat
           label="Vrijednost inventoryja"
           value={isLoading ? "…" : money.fmt(p?.value)}
-          sub={p && `${p.pricedCount}/${p.heldCount} itema s cijenom · ${PROVIDER_LABELS[provider]}`}
+          sub={p && `${p.pricedCount}/${p.heldCount} itema s tržišnom vrijednošću`}
         />
         <Stat
           label="Uloženo (držim)"
@@ -72,7 +70,7 @@ export default function Dashboard() {
             {p?.history.length ? (
               <PortfolioChart data={p.history} mode={mode} />
             ) : (
-              <Empty>Nema povijesti cijena za ovaj izvor. Pričekaj prvo automatsko osvježavanje ili odaberi „CSFloat · prodaje“ za povijest unazad.</Empty>
+              <Empty>Još nema povijesti cijena. Pričekaj prvo osvježavanje cijena.</Empty>
             )}
           </div>
         </Card>

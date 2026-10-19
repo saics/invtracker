@@ -42,7 +42,3 @@ async function request(url: string, opts: FetchOpts, accept: string): Promise<Re
 export async function fetchJson<T = unknown>(url: string, opts: FetchOpts = {}): Promise<T> {
   return (await (await request(url, opts, "application/json")).json()) as T;
 }
-
-export async function fetchText(url: string, opts: FetchOpts = {}): Promise<string> {
-  return (await request(url, opts, "text/html,*/*")).text();
-}

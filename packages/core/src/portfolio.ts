@@ -1,6 +1,7 @@
-import { items, transactions, type DB, type Item, type PriceProvider, type Transaction } from "@inv/db";
+import { items, transactions, type DB, type Item, type Transaction } from "@inv/db";
 import { desc } from "drizzle-orm";
-import { latestPrices, priceSeries } from "./prices";
+import { dayKey } from "./market";
+import { dailySeries, latestDaily } from "./prices";
 
 const DAY = 86_400_000;
 
@@ -32,18 +33,21 @@ export function computeItemPnl(
 export type InventoryRow = Item & {
   buy: Transaction | null;
   sell: Transaction | null;
+  /** Market value (see market.ts). */
   price: number | null;
-  priceTs: Date | null;
+  /** Day of that value and which observation it came from. */
+  priceDay: string | null;
+  priceBasis: string | null;
   change7dPct: number | null;
   spark: number[];
 } & ItemPnl;
 
-export async function getInventoryView(db: DB, provider: PriceProvider): Promise<InventoryRow[]> {
+export async function getInventoryView(db: DB): Promise<InventoryRow[]> {
   const [allItems, allTx, latest, series] = await Promise.all([
     db.select().from(items),
     db.select().from(transactions).orderBy(desc(transactions.date)),
-    latestPrices(db, provider),
-    priceSeries(db, provider, new Date(Date.now() - 30 * DAY)),
+    latestDaily(db, "market"),
+    dailySeries(db, "market", new Date(Date.now() - 30 * DAY)),
   ]);
   const buyBy = new Map<number, Transaction>();
   const sellBy = new Map<number, Transaction>();
@@ -58,26 +62,21 @@ export async function getInventoryView(db: DB, provider: PriceProvider): Promise
     const sell = sellBy.get(it.id) ?? null;
     const lp = latest.get(it.marketHashName);
     const points = series.get(it.marketHashName) ?? [];
-    const weekAgo = [...points].reverse().find((p) => p.ts.getTime() <= Date.now() - 7 * DAY) ?? points[0];
+    const weekAgoDay = dayKey(Date.now() - 7 * DAY);
+    const weekAgo = [...points].reverse().find((p) => p.day <= weekAgoDay);
     const change7dPct = lp && weekAgo && weekAgo.price ? ((lp.price - weekAgo.price) / weekAgo.price) * 100 : null;
     return {
       ...it,
       buy,
       sell,
       price: lp?.price ?? null,
-      priceTs: lp?.ts ?? null,
+      priceDay: lp?.day ?? null,
+      priceBasis: lp?.basis ?? null,
       change7dPct,
-      spark: dailyLast(points).map((p) => p.price),
+      spark: points.map((p) => p.price),
       ...computeItemPnl(it.status, buy ?? undefined, sell ?? undefined, lp?.price ?? null),
     };
   });
-}
-
-/** Keeps the last point of each UTC day. */
-function dailyLast<T extends { ts: Date }>(points: T[]): T[] {
-  const byDay = new Map<number, T>();
-  for (const p of points) byDay.set(Math.floor(p.ts.getTime() / DAY), p);
-  return [...byDay.values()];
 }
 
 export type PortfolioSummary = {
@@ -110,11 +109,10 @@ export function ownershipWindow(
 
 export async function getPortfolio(
   db: DB,
-  provider: PriceProvider,
   days = 90,
   itemIds?: number[],
 ): Promise<PortfolioSummary> {
-  const all = await getInventoryView(db, provider);
+  const all = await getInventoryView(db);
   // Placeholder items (no asset id) are back-dated to their transaction, so only synced items count here.
   const firstSyncAt = Math.min(...all.filter((r) => r.assetId).map((r) => r.firstSeenAt.getTime()));
   const ids = itemIds && new Set(itemIds);
@@ -130,13 +128,13 @@ export async function getPortfolio(
 
   // Daily portfolio value: carry each item's last known price forward.
   const since = new Date(Date.now() - days * DAY);
-  const series = await priceSeries(db, provider, since);
+  const series = await dailySeries(db, "market", since);
   const startDay = Math.floor(since.getTime() / DAY);
   const today = Math.floor(Date.now() / DAY);
   const daily = new Map<string, Map<number, number>>();
   for (const [name, pts] of series) {
     const m = new Map<number, number>();
-    for (const p of pts) m.set(Math.floor(p.ts.getTime() / DAY), p.price);
+    for (const p of pts) m.set(Date.parse(`${p.day}T00:00:00Z`) / DAY, p.price);
     daily.set(name, m);
   }
   // Sold/gone items count too while they were owned, so past days are not understated.
@@ -164,7 +162,8 @@ export async function getPortfolio(
     if (any) history.push({ date: new Date(d * DAY).toISOString().slice(0, 10), value: v, invested: inv, pnl });
   }
 
-  const movers = held
+  // One entry per item name (several copies of a case would otherwise fill the list).
+  const movers = [...new Map(held.map((r) => [r.marketHashName, r])).values()]
     .filter((r) => r.change7dPct != null)
     .sort((a, b) => Math.abs(b.change7dPct!) - Math.abs(a.change7dPct!))
     .slice(0, 6)

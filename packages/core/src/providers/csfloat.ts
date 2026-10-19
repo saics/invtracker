@@ -44,13 +44,14 @@ export class CsfloatClient {
     return fetchJson<T>(BASE + path, { headers: { Authorization: this.apiKey }, minGapMs: 700 });
   }
 
-  /** Cheapest active buy-now listing for an exact market_hash_name. */
-  async lowestListing(marketHashName: string): Promise<CsfloatListing | null> {
+  /** Cheapest active buy-now listing for an exact market_hash_name, optionally within a float range. */
+  async lowestListing(marketHashName: string, float?: { min: number; max: number }): Promise<CsfloatListing | null> {
     const q = new URLSearchParams({
       market_hash_name: marketHashName,
       sort_by: "lowest_price",
       type: "buy_now",
       limit: "1",
+      ...(float && { min_float: String(float.min), max_float: String(float.max) }),
     });
     const listings = unwrapList<CsfloatListing>(await this.get(`/listings?${q}`));
     return listings.find((l) => l.item?.market_hash_name === marketHashName) ?? null;
