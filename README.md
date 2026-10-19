@@ -71,11 +71,9 @@ Float, pattern i stickeri/charmovi (sa scrapeom svakog stickera) čitaju se pri 
 
 Steam mijenja asset id pri svakoj razmjeni, pa se kupnja povezuje s itemom po imenu i floatu (kad je poznat), inače s najstarijim slobodnim itemom tog imena. Ako za transakciju nema itema (npr. davno prodan), stvori se zamjenski item kako bi se P&L i dalje računao.
 
-## Deploy na web (kasnije)
+## Deploy
 
-- Baza: napravi Turso bazu i postavi `DATABASE_URL=libsql://…` + `DATABASE_AUTH_TOKEN`; isti kod radi bez izmjena.
-- App: Vercel (root `apps/web`), a cron (Vercel Cron ili GitHub Actions) neka zove `POST /api/v1/inventory/sync` i `POST /api/v1/prices/refresh`.
-- Prije javnog deploya treba dodati autentikaciju na API.
+Aplikacija radi na vlastitom serveru (Docker) iza Cloudflare Tunnela i Cloudflare Accessa, s backupom baze na R2 (Litestream). Svaki push na `main` se sam deploya. Postavljanje korak po korak: [deploy/README.md](deploy/README.md).
 
 ## Skripte
 

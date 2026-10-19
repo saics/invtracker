@@ -1,0 +1,13 @@
+# Values come from /opt/invtracker/.env (Litestream expands ${VARS}).
+dbs:
+  - path: /data/invtracker.db
+    replicas:
+      - type: s3
+        endpoint: ${LITESTREAM_R2_ENDPOINT}
+        bucket: ${LITESTREAM_R2_BUCKET}
+        path: invtracker
+        region: auto
+        access-key-id: ${LITESTREAM_R2_ACCESS_KEY_ID}
+        secret-access-key: ${LITESTREAM_R2_SECRET_ACCESS_KEY}
+        snapshot-interval: 24h
+        retention: 720h

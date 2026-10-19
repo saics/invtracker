@@ -36,10 +36,13 @@ function resolveDbUrl(raw: string | undefined): string {
 
 function create() {
   loadRootEnv();
-  const client = createClient({
-    url: resolveDbUrl(process.env.DATABASE_URL),
-    authToken: process.env.DATABASE_AUTH_TOKEN || undefined,
-  });
+  const url = resolveDbUrl(process.env.DATABASE_URL);
+  const client = createClient({ url, authToken: process.env.DATABASE_AUTH_TOKEN || undefined });
+  if (url.startsWith("file:")) {
+    // WAL lets the Litestream backup read while the app writes; wait instead of failing on a lock.
+    void client.execute("PRAGMA journal_mode = WAL").catch(() => {});
+    void client.execute("PRAGMA busy_timeout = 5000").catch(() => {});
+  }
   return drizzle(client, { schema });
 }
 

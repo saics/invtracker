@@ -1,0 +1,11 @@
+**/node_modules
+**/.next
+.git
+.github
+.claude
+data
+.env
+.env*.local
+deploy
+*.db
+dev.cmd
